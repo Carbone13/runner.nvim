@@ -8,40 +8,30 @@ local action_state = require("telescope.actions.state")
 local Terminal  = require('toggleterm.terminal').Terminal
 local default_options = themes.get_dropdown({})
 
-local M = {}
-M.type = "debug"
-M.target = "all"
-M.target_executable = false
-M.target_executable_path = ""
+--------
+-- UTILS
+--------
 
 local function get_main_directory ()
 	return require('plenary.path'):new(vim.fn.getcwd())
 end
 
-local function get_build_directory ()
-	if M.type == "debug" then
+local function get_build_directory (type)
+	if type == "debug" then
 		return get_main_directory() / ".build" / "debug"
 	else
 		return get_main_directory() / ".build" / "release"
 	end
 end
 
-local function get_reply_dir ()
-	return get_build_directory() / '.cmake' / 'api' / 'v1' / 'reply'
+local function get_reply_dir (type)
+	return get_build_directory(type) / '.cmake' / 'api' / 'v1' / 'reply'
 end
 
-local function is_cmake_configured ()
+local function get_all_targets (type)
     local scandir = require('plenary.scandir')
     local Path = require('plenary.path')
-    local found_files = scandir.scan_dir(get_reply_dir().filename, { search_pattern = 'codemodel*' })
-
-	return #found_files > 0
-end
-
-local function get_all_targets ()
-    local scandir = require('plenary.scandir')
-    local Path = require('plenary.path')
-    local found_files = scandir.scan_dir(get_reply_dir().filename, { search_pattern = 'codemodel*' })
+    local found_files = scandir.scan_dir(get_reply_dir(type).filename, { search_pattern = 'codemodel*' })
 
     local codemodel = Path:new(found_files[1])
     local codemodel_json = vim.json.decode(codemodel:read())
@@ -50,7 +40,7 @@ local function get_all_targets ()
 
     if #configurations > 1 then
         for _, conf in ipairs(configurations) do
-            if M.type == conf['name'] then
+            if type == conf['name'] then
                 selectedConfiguration = conf
                 break
             end
@@ -60,32 +50,39 @@ local function get_all_targets ()
     return selectedConfiguration['targets']
 end
 
-function get_target_info(codemodel_target)
-    return vim.json.decode((get_reply_dir() / codemodel_target['jsonFile']):read())
+function get_target_info(codemodel_target, type)
+    return vim.json.decode((get_reply_dir(type) / codemodel_target['jsonFile']):read())
 end
 
-function M.cmake_configure (auto_close, callback)
-	-- TODO arg
-	local query_dir = get_build_directory() / '.cmake' / 'api' / 'v1' / 'query'
+local function is_project_configured (type)
+	return get_build_directory(type):exists()
+end
+
+local function cmake_configure (type, silent, callback)
+	local query_dir = get_build_directory(type) / '.cmake' / 'api' / 'v1' / 'query'
 	query_dir:mkdir({ parents = true })
 	local codemodel_file = query_dir / 'codemodel-v2'
 	if not codemodel_file:is_file() then
 		codemodel_file:touch()
 	end
 
+	local arg = "-DCMAKE_BUILD_TYPE=Debug"
+	if type == "release" then
+		arg = "-DCMAKE_BUILD_TYPE=Release"
+	end
+
 	local term = Terminal:new({
-		cmd = "cmake -S . -B .build/" .. M.type .. " -GNinja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+		cmd = "cmake -S . -B .build/" .. type .. " -GNinja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON " .. arg,
 		dir = vim.fn.getcwd(),
-		hidden = false,
+		hidden = true,
 		auto_scroll = true,
-		close_on_exit = auto_close,
+		close_on_exit = silent,
 		direction = "horizontal",
 		on_open = function(term)
 			vim.cmd("startinsert!")
 			vim.api.nvim_buf_set_keymap(term.bufnr, "n", "<Esc>", "<cmd>close<CR>", {noremap = true, silent = true})
 		end,
 		on_exit = function(t, j , e, nb, name)
-			print("cmake configured !")
 			if callback then
 				callback()
 			end
@@ -93,52 +90,31 @@ function M.cmake_configure (auto_close, callback)
 		})
 	term:toggle()
 end
--- Generate the cmake project of the selected type
-function M.cmake_configure_prompt (opts)
-	opts = opts or default_options
-	local arg = "none"
 
-	pickers.new(opts, 
-	{
-		prompt_title = "CMake Configure",
-		finder = finders.new_table {
-			results = { "Debug", "Release" }
-		},
-		sorter = conf.generic_sorter(opts),
-		attach_mappings = function(prompt_bufnr, map)
-			actions.select_default:replace(function()
-				actions.close(prompt_bufnr)
-				local selection = action_state.get_selected_entry()
-				if selection["index"] == 1 then
-					M.type = "debug"
-					arg = "-DCMAKE_BUILD_TYPE=Debug"
-				else
-					M.type = "release"
-					arg = "-DCMAKE_BUILD_TYPE=Release"
-				end
+-------
+-- IMPL
+-------
 
-				M.cmake_configure(false, nil)
-			end)
-			return true
-		end
-	}):find()
-end
+local M = {}
 
--- Choose a target to build/run 
-function M.cmake_choose_target (opts, exe_only)
-	opts = opts or default_options
-	if not get_build_directory():exists() then
-		M.cmake_configure(true, M.cmake_choose_target)
-		return nil
+M.type = "debug"
+M.target = "all"
+M.target_executable = false
+M.target_executable_path = ""
+
+function M.cmake_select_target (exe_only, callback)
+	if not is_project_configured(M.type) then
+		cmake_configure(M.type, true, M.cmake_select_target)
+		return
 	end
 
-	local codemodel_targets = get_all_targets()
+	local codemodel_targets = get_all_targets(M.type)
 
 	local targets = {}
 	local targets_info = {}
 	local targets_path = {}
 	for _, target in ipairs(codemodel_targets) do 
-		local target_info = get_target_info(target)
+		local target_info = get_target_info(target, M.type)
 
 		if not exe_only or target_info["type"] == "EXECUTABLE" then
 			table.insert(targets, target_info["name"])
@@ -146,13 +122,11 @@ function M.cmake_choose_target (opts, exe_only)
 		end
 	end
 
-	pickers.new(opts, 
+	pickers.new({}, 
 	{
 		prompt_title = "CMake Select Target",
-		finder = finders.new_table {
-			results = targets
-		},
-		sorter = conf.generic_sorter(opts),
+		finder = finders.new_table { results = targets },
+		sorter = conf.generic_sorter(themes.get_dropdown({})),
 		attach_mappings = function(prompt_bufnr, map)
 			actions.select_default:replace(function()
 				actions.close(prompt_bufnr)
@@ -162,41 +136,84 @@ function M.cmake_choose_target (opts, exe_only)
 					M.target_executable = true
 					M.target_executable_path = targets_info[selection[1]]["paths"]["build"] .. "/" .. targets_info[selection[1]]["nameOnDisk"]
 				end
+
+				if callback then
+					callback()
+				end
+			end)
+			return true
+		end
+	}):find()
+
+end
+
+function M.cmake_select_type ()
+	pickers.new({}, 
+	{
+		prompt_title = "CMake Configure",
+		finder = finders.new_table { results = { "Debug", "Release" }},
+		sorter = conf.generic_sorter(themes.get_dropdown({})),
+		attach_mappings = function(prompt_bufnr, map)
+			actions.select_default:replace(function()
+				actions.close(prompt_bufnr)
+				local selection = action_state.get_selected_entry()
+				if selection["index"] == 1 then
+					M.type = "debug"
+				else
+					M.type = "release"
+				end
+
+				cmake_configure(M.type, false, nil)
 			end)
 			return true
 		end
 	}):find()
 end
 
-function M.cmake_build_prompt (opts)
-	opts = opts or default_options
-	if not get_build_directory():exists() then
-		M.cmake_configure(true, M.cmake_build_prompt)
-		return nil
-	end
-	
-	local term = Terminal:new({
-		cmd = "cmake --build " .. get_build_directory() .. " --target " .. M.target,
-		dir = vim.fn.getcwd(),
-		hidden = true,
-		auto_scroll = true,
-		close_on_exit = false,
-		direction = "horizontal"
-	})
-	term:toggle()
+function M.valid ()
+	local cmakelists = Path:new(vim.loop.cwd(), "CMakeLists.txt")
+	return cmakelists:is_file() 
 end
 
+function M.prompt()
+	pickers.new({}, 
+	{
+		prompt_title = "CMake",
+		finder = finders.new_table {
+			results = { "Run", "Debug", "Build", "Type", "Target", }
+		},
+		sorter = conf.generic_sorter(themes.get_dropdown({})),
+		attach_mappings = function(prompt_bufnr, map)
+			    actions.select_default:replace(function()
+					actions.close(prompt_bufnr)
+					local selection = action_state.get_selected_entry()
 
-function M.cmake_run_prompt (opts)
-	opts = opts or default_options
-	if not get_build_directory():exists() then
-		M.cmake_configure(true, M.cmake_run_prompt)
-		return nil
+					if selection["index"] == 5 then -- Target
+						M.cmake_select_target(false)
+					elseif selection["index"] == 4 then -- Type
+						M.cmake_select_type()
+					elseif selection["index"] == 3 then -- Build
+						M.build()
+					elseif selection["index"] == 2 then -- Debug
+						M.debug()
+					elseif selection["index"] == 1 then -- Run
+						M.run()
+					end
+				end)
+			return true
+		end
+	}):find()
+end
+
+function M.run ()
+	if not is_project_configured(M.type) then
+		cmake_configure(M.type, true, M.run)
+		return
 	end
-	
-	-- check if selected target is actually executable
+
 	if not M.target_executable then
-		 M.cmake_choose_target(opts, true)
+		 M.cmake_select_target(true, M.run)
+		return
 	end
 	
 	local term = Terminal:new({
@@ -208,38 +225,28 @@ function M.cmake_run_prompt (opts)
 		direction = "horizontal",
 	})
 	term:toggle()
+
 end
 
+function M.build ()
+	if not is_project_configured(M.type) then
+		cmake_configure(M.type, true, M.build)
+		return
+	end
 
-function M.prompt (opts)
-	opts = opts or default_options
-	pickers.new(opts, 
-	{
-		prompt_title = "CMake",
-		finder = finders.new_table {
-			results = { "Run", "Debug", "Build", "Type", "Target", }
-		},
-		sorter = conf.generic_sorter(opts),
-		attach_mappings = function(prompt_bufnr, map)
-			    actions.select_default:replace(function()
-					actions.close(prompt_bufnr)
-					local selection = action_state.get_selected_entry()
+	local term = Terminal:new({
+		cmd = "cmake --build " .. get_build_directory(M.type) .. " --target " .. M.target,
+		dir = vim.fn.getcwd(),
+		hidden = true,
+		auto_scroll = true,
+		close_on_exit = false,
+		direction = "horizontal"
+	})
+	term:toggle()
+end
 
-					if selection["index"] == 5 then
-						M.cmake_choose_target(opts)
-					elseif selection["index"] == 4 then
-						M.cmake_configure_prompt(opts)
-					elseif selection["index"] == 3 then
-						M.cmake_build_prompt(opts)
-					elseif selection["index"] == 2 then
-						--
-					elseif selection["index"] == 1 then
-						M.cmake_run_prompt(opts)
-					end
-				end)
-			return true
-		end
-	}):find()
+function M.debug ()
+	-- TODO
 end
 
 function M.get_status ()
