@@ -1,4 +1,3 @@
--- Treesitter
 local pickers = require("telescope.pickers")
 local finders = require("telescope.finders")
 local conf = require("telescope.config").values
@@ -6,7 +5,6 @@ local themes = require("telescope.themes")
 local actions = require("telescope.actions")
 local action_state = require("telescope.actions.state")
 local Terminal  = require('toggleterm.terminal').Terminal
-local default_options = themes.get_dropdown({})
 
 --------
 -- UTILS
@@ -71,8 +69,10 @@ local function cmake_configure (type, silent, callback)
 		arg = "-DCMAKE_BUILD_TYPE=Release"
 	end
 
+	os.execute("rm ./compile_commands.json")
+
 	local term = Terminal:new({
-		cmd = "cmake -S . -B .build/" .. type .. " -GNinja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON " .. arg,
+		cmd = "cmake -S . -B .build/" .. type .. " -GNinja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON " .. arg .. " ; ln -s " .. ".build/" .. type .. "/compile_commands.json ./compile_commands.json",
 		dir = vim.fn.getcwd(),
 		hidden = true,
 		auto_scroll = true,
@@ -86,6 +86,7 @@ local function cmake_configure (type, silent, callback)
 			if callback then
 				callback()
 			end
+			vim.cmd("LspRestart")
 		end
 		})
 	term:toggle()
@@ -122,7 +123,7 @@ function M.cmake_select_target (exe_only, callback)
 		end
 	end
 
-	pickers.new({}, 
+	pickers.new(themes.get_dropdown({}), 
 	{
 		prompt_title = "CMake Select Target",
 		finder = finders.new_table { results = targets },
@@ -148,7 +149,7 @@ function M.cmake_select_target (exe_only, callback)
 end
 
 function M.cmake_select_type ()
-	pickers.new({}, 
+	pickers.new(themes.get_dropdown({}), 
 	{
 		prompt_title = "CMake Configure",
 		finder = finders.new_table { results = { "Debug", "Release" }},
@@ -171,12 +172,12 @@ function M.cmake_select_type ()
 end
 
 function M.valid ()
-	local cmakelists = Path:new(vim.loop.cwd(), "CMakeLists.txt")
+	local cmakelists = require('plenary.path'):new(vim.loop.cwd(), "CMakeLists.txt")
 	return cmakelists:is_file() 
 end
 
 function M.prompt()
-	pickers.new({}, 
+	pickers.new(themes.get_dropdown({}), 
 	{
 		prompt_title = "CMake",
 		finder = finders.new_table {
@@ -225,7 +226,6 @@ function M.run ()
 		direction = "horizontal",
 	})
 	term:toggle()
-
 end
 
 function M.build ()
@@ -246,7 +246,36 @@ function M.build ()
 end
 
 function M.debug ()
-	-- TODO
+	if not is_project_configured(M.type) then
+		cmake_configure(M.type, true, M.run)
+		return
+	end
+
+	if not M.target_executable then
+		 M.cmake_select_target(true, M.run)
+		return
+	end
+	
+	local term = Terminal:new({
+		cmd = "cmake --build " .. get_build_directory() .. " --target " .. M.target,
+		dir = vim.fn.getcwd(),
+		hidden = true,
+		auto_scroll = true,
+		close_on_exit = true,
+		direction = "horizontal",
+	})
+	term:toggle()
+
+	require('dap').run(
+	{
+		type = "cpp",
+		request = 'launch',
+		program = get_build_directory() .. "/" .. M.target_executable_path,
+		args = {},
+		stopOnEntry = false,
+		runInTerminal = false,
+		console = "integratedTerminal",
+    })
 end
 
 function M.get_status ()

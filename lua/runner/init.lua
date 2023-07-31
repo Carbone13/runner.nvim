@@ -1,9 +1,5 @@
 local Path = require('plenary.path')
 
--- CMake
-local cmake_lang = require("runner.lang.cmake")
-
--- Currently loaded lang 
 -- Lang should implement these functions :
 -- valid() : check if the lang should be actually used
 -- prompt() : a general prompt which list all possible action (run; build; debug etc...)
@@ -11,23 +7,39 @@ local cmake_lang = require("runner.lang.cmake")
 -- build(): should build the project, but not run (for non-compiled project, you can redirect to run, or do nothing)
 -- debug() : same as run, but with debug capabilities
 -- get_status() : return a string that expose status, to be displayed in Lualine
--- 
---
---
 -- All other actions belong in the prompt(), like CMake target selection etc...
--- TODO Lang caching
+local langs = {
+	require("runner.lang.cmake"),
+	require("runner.lang.python"),
+}
 local lang = nil
 
+
+local function reload ()
+	-- Parse lang
+	for _, potential_lang in pairs(langs) do
+		if potential_lang.valid() then
+			lang = potential_lang
+		end
+	end
+end
+
 local function setup(opts)
-	local cmakelists = Path:new(vim.loop.cwd(), "CMakeLists.txt")
-	if cmakelists:is_file() then
-		lang = cmake_lang
+	-- Parse lang
+	for _, potential_lang in pairs(langs) do
+		if potential_lang.valid() then
+			lang = potential_lang
+		end
 	end
 
 	vim.api.nvim_create_user_command(
 		'RunnerPrompt',
 		function()
-			lang.prompt()
+			if lang then
+				lang.prompt()
+			else
+				print("Runner: Language is not supported !")
+			end
 		end,
 		{ bang = true }
 	)
@@ -35,7 +47,11 @@ local function setup(opts)
 	vim.api.nvim_create_user_command(
 		'RunnerRun',
 		function ()
-			lang.run()
+			if lang then
+				lang.run()
+			else
+				print("Runner: Language is not supported !")
+			end
 		end,
 		{ bang = true }
 	)
@@ -43,7 +59,11 @@ local function setup(opts)
 	vim.api.nvim_create_user_command(
 		'RunnerBuild',
 		function ()
-			lang.build()
+			if lang then
+				lang.build()
+			else
+				print("Runner: Language is not supported !")
+			end
 		end,
 		{ bang = true }
 	)
@@ -51,14 +71,30 @@ local function setup(opts)
 	vim.api.nvim_create_user_command(
 		'RunnerDebug',
 		function ()
-			lang.debug()
+			if lang then
+				lang.debug()
+			else
+				print("Runner: Language is not supported !")
+			end
 		end,
 		{ bang = true }
 	)
+
+	vim.api.nvim_create_user_command(
+		'RunnerReload',
+		function ()
+			reload()
+		end,
+		{ bang = true }
+	)
+
+	vim.api.nvim_create_autocmd({"BufEnter", "BufWinEnter"}, { callback = function() reload() end })
 end
+
 
 return {
 	setup = setup,
+	reload = reload(),
 	get_status = function() return lang.get_status() end
 }
 
