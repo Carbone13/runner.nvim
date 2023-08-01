@@ -4,25 +4,25 @@ local conf = require("telescope.config").values
 local themes = require("telescope.themes")
 local actions = require("telescope.actions")
 local action_state = require("telescope.actions.state")
-local Terminal  = require('toggleterm.terminal').Terminal
+local Terminal = require("toggleterm.terminal").Terminal
 
 local M = {}
 M.cache = false
 
-function M.valid () 
+function M.valid()
 	return vim.bo.filetype == "python"
 end
 
-function M.prompt ()
-	pickers.new(themes.get_dropdown({}), 
-	{
-		prompt_title = "Python",
-		finder = finders.new_table {
-			results = { "Run", "Debug" }
-		},
-		sorter = conf.generic_sorter(themes.get_dropdown({})),
-		attach_mappings = function(prompt_bufnr, map)
-			    actions.select_default:replace(function()
+function M.prompt()
+	pickers
+		.new(themes.get_dropdown({}), {
+			prompt_title = "Python",
+			finder = finders.new_table({
+				results = { "Run", "Debug" },
+			}),
+			sorter = conf.generic_sorter(themes.get_dropdown({})),
+			attach_mappings = function(prompt_bufnr, map)
+				actions.select_default:replace(function()
 					actions.close(prompt_bufnr)
 					local selection = action_state.get_selected_entry()
 					if selection["index"] == 2 then -- Debug
@@ -31,12 +31,13 @@ function M.prompt ()
 						M.run()
 					end
 				end)
-			return true
-		end
-	}):find()
+				return true
+			end,
+		})
+		:find()
 end
 
-function M.run ()
+function M.run()
 	local term = Terminal:new({
 		cmd = "python3 " .. vim.api.nvim_buf_get_name(0),
 		hidden = true,
@@ -47,24 +48,23 @@ function M.run ()
 	term:toggle()
 end
 
-function M.build ()
+function M.build()
 	M.run()
 end
 
-function M.debug ()
-	require('dap').run(
-	{
+function M.debug()
+	require("dap").run({
 		type = "python",
-		request = 'launch',
+		request = "launch",
 		program = vim.api.nvim_buf_get_name(0),
 		args = {},
 		stopOnEntry = false,
 		runInTerminal = false,
 		console = "integratedTerminal",
-    })
+	})
 end
 
-function M.get_status ()
+function M.get_status()
 	return "PYTHON"
 end
 

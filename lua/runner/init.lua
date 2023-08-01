@@ -17,8 +17,7 @@ local langs = {
 }
 local lang = nil
 
-
-local function reload ()
+local function reload()
 	-- Parse lang
 	for _, potential_lang in pairs(langs) do
 		if potential_lang.valid() then
@@ -41,73 +40,57 @@ end
 -- }
 local function setup(opts)
 	-- init cache
-	cache.init_cache()	
+	cache.init_cache()
 	-- Parse lang
 	reload()
 
-	vim.api.nvim_create_user_command(
-		'RunnerPrompt',
-		function()
-			if lang then
-				lang.prompt()
-			else
-				print("Runner: Language is not supported !")
-			end
-		end,
-		{ bang = true }
-	)
+	vim.api.nvim_create_user_command("RunnerPrompt", function()
+		if lang then
+			lang.prompt()
+		else
+			print("Runner: Language is not supported !")
+		end
+	end, { bang = true })
 
-	vim.api.nvim_create_user_command(
-		'RunnerRun',
-		function ()
-			if lang then
-				lang.run()
-			else
-				print("Runner: Language is not supported !")
-			end
-		end,
-		{ bang = true }
-	)
+	vim.api.nvim_create_user_command("RunnerRun", function()
+		if lang then
+			lang.run()
+		else
+			print("Runner: Language is not supported !")
+		end
+	end, { bang = true })
 
-	vim.api.nvim_create_user_command(
-		'RunnerBuild',
-		function ()
-			if lang then
-				lang.build()
-			else
-				print("Runner: Language is not supported !")
-			end
-		end,
-		{ bang = true }
-	)
+	vim.api.nvim_create_user_command("RunnerBuild", function()
+		if lang then
+			lang.build()
+		else
+			print("Runner: Language is not supported !")
+		end
+	end, { bang = true })
 
-	vim.api.nvim_create_user_command(
-		'RunnerDebug',
-		function ()
-			if lang then
-				lang.debug()
-			else
-				print("Runner: Language is not supported !")
-			end
-		end,
-		{ bang = true }
-	)
+	vim.api.nvim_create_user_command("RunnerDebug", function()
+		if lang then
+			lang.debug()
+		else
+			print("Runner: Language is not supported !")
+		end
+	end, { bang = true })
 
-	vim.api.nvim_create_user_command(
-		'RunnerReload',
-		function ()
+	vim.api.nvim_create_user_command("RunnerReload", function()
+		reload()
+	end, { bang = true })
+
+	vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter" }, {
+		callback = function()
 			reload()
 		end,
-		{ bang = true }
-	)
-
-	vim.api.nvim_create_autocmd({"BufEnter", "BufWinEnter"}, { callback = function() reload() end })
+	})
 end
-
 
 return {
 	setup = setup,
 	reload = reload(),
-	get_status = function() return lang.get_status() end
+	get_status = function()
+		return lang.get_status()
+	end,
 }
-
