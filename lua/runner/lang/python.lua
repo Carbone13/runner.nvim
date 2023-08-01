@@ -7,6 +7,7 @@ local action_state = require("telescope.actions.state")
 local Terminal  = require('toggleterm.terminal').Terminal
 
 local M = {}
+M.cache = false
 
 function M.valid () 
 	return vim.bo.filetype == "python"

@@ -1,4 +1,4 @@
-local Path = require('plenary.path')
+local cache = require("runner.cache")
 
 -- Lang should implement these functions :
 -- valid() : check if the lang should be actually used
@@ -7,6 +7,9 @@ local Path = require('plenary.path')
 -- build(): should build the project, but not run (for non-compiled project, you can redirect to run, or do nothing)
 -- debug() : same as run, but with debug capabilities
 -- get_status() : return a string that expose status, to be displayed in Lualine
+-- cache:bool : do we use cache
+-- serialize() -> Table : serialize current settings
+-- deserialize() : deserialize from previous session
 -- All other actions belong in the prompt(), like CMake target selection etc...
 local langs = {
 	require("runner.lang.cmake"),
@@ -22,15 +25,25 @@ local function reload ()
 			lang = potential_lang
 		end
 	end
+
+	if not lang then
+		return
+	end
+
+	if lang.cache then
+		lang.deserialize()
+	end
 end
 
+-- opts look like :
+-- {
+-- 	  langs = { }, (Actually TO-DO!)
+-- }
 local function setup(opts)
+	-- init cache
+	cache.init_cache()	
 	-- Parse lang
-	for _, potential_lang in pairs(langs) do
-		if potential_lang.valid() then
-			lang = potential_lang
-		end
-	end
+	reload()
 
 	vim.api.nvim_create_user_command(
 		'RunnerPrompt',

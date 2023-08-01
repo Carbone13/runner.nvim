@@ -5,6 +5,7 @@ local themes = require("telescope.themes")
 local actions = require("telescope.actions")
 local action_state = require("telescope.actions.state")
 local Terminal  = require('toggleterm.terminal').Terminal
+local cache = require("runner.cache")
 
 --------
 -- UTILS
@@ -98,6 +99,7 @@ end
 
 local M = {}
 
+M.cache = true
 M.type = "debug"
 M.target = "all"
 M.target_executable = false
@@ -138,6 +140,8 @@ function M.cmake_select_target (exe_only, callback)
 					M.target_executable_path = targets_info[selection[1]]["paths"]["build"] .. "/" .. targets_info[selection[1]]["nameOnDisk"]
 				end
 
+				M.serialize()
+
 				if callback then
 					callback()
 				end
@@ -165,6 +169,7 @@ function M.cmake_select_type ()
 				end
 
 				cmake_configure(M.type, false, nil)
+				M.serialize()
 			end)
 			return true
 		end
@@ -284,6 +289,27 @@ function M.get_status ()
 	else
 		return M.target .. " [" .. M.type .. "] " .. ""
 	end
+end
+
+function M.serialize ()
+	cache.save({
+		type = M.type,
+		target = M.target,
+		target_executable = M.target_executable,
+		target_executable_path = M.target_executable_path,
+	})
+end
+	
+function M.deserialize ()
+	local t = cache.load()
+	if t == -1 then
+		return
+	end
+
+	M.type = t["type"]
+	M.target = t["target"]
+	M.target_executable = t["target_executable"]
+	M.target_executable_path = t["target_executable_path"]
 end
 
 return M
