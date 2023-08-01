@@ -269,35 +269,37 @@ function M.build()
 end
 
 function M.debug()
-	if not is_project_configured(M.type) then
-		cmake_configure(M.type, true, M.run)
+	if not is_project_configured("debug") then
+		M.type = "debug"
+		cmake_configure(M.type, true, M.debug)
 		return
 	end
 
 	if not M.target_executable then
-		M.cmake_select_target(true, M.run)
+		M.cmake_select_target(true, M.debug)
 		return
 	end
 
 	local term = Terminal:new({
-		cmd = "cmake --build " .. get_build_directory() .. " --target " .. M.target,
+		cmd = "cmake --build " .. get_build_directory(M.type) .. " --target " .. M.target,
 		dir = vim.fn.getcwd(),
 		hidden = true,
 		auto_scroll = true,
 		close_on_exit = true,
 		direction = "horizontal",
+		on_exit = function ()
+			require("dap").run({
+				type = "codelldb",
+				request = "launch",
+				program = get_build_directory(M.type) .. "/" .. M.target_executable_path,
+				args = {},
+				stopOnEntry = false,
+				runInTerminal = false,
+				console = "integratedTerminal",
+			})
+		end
 	})
 	term:toggle()
-
-	require("dap").run({
-		type = "cpp",
-		request = "launch",
-		program = get_build_directory() .. "/" .. M.target_executable_path,
-		args = {},
-		stopOnEntry = false,
-		runInTerminal = false,
-		console = "integratedTerminal",
-	})
 end
 
 function M.get_status()
