@@ -235,11 +235,11 @@ function M.run()
 
 	local term = Terminal:new({
 		cmd = "cmake --build "
-			.. get_build_directory()
+			.. get_build_directory(M.type)
 			.. " --target "
 			.. M.target
 			.. " ; "
-			.. get_build_directory()
+			.. get_build_directory(M.type)
 			.. "/"
 			.. M.target_executable_path,
 		dir = vim.fn.getcwd(),
