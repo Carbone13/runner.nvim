@@ -36,8 +36,5 @@ CMake support :
 - Target building/running/debugging
 
 Python support (run and debug)
+OCaml support (run)
 
-TO-DO :
-- OCaml
-- C#
-- Make (?)

@@ -287,7 +287,7 @@ function M.debug()
 		auto_scroll = true,
 		close_on_exit = true,
 		direction = "horizontal",
-		on_exit = function ()
+		on_exit = function()
 			require("dap").run({
 				type = "codelldb",
 				request = "launch",
@@ -297,7 +297,7 @@ function M.debug()
 				runInTerminal = false,
 				console = "integratedTerminal",
 			})
-		end
+		end,
 	})
 	term:toggle()
 end
