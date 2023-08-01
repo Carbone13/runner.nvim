@@ -14,6 +14,7 @@ local cache = require("runner.cache")
 local langs = {
 	require("runner.lang.cmake"),
 	require("runner.lang.python"),
+	require("runner.lang.ocaml"),
 }
 local lang = nil
 
